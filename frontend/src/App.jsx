@@ -3,8 +3,7 @@ import { useEffect, useState } from "react";
 import "./App.css";
 import { supabase } from "./supabase";
 import Login from "./Login";
-
-const API_URL = "http://localhost:5050";
+const API_URL = "https://resourceloop-api.onrender.com";
 
 function App() {
     const [user, setUser] = useState(null);
