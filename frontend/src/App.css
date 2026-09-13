@@ -1492,4 +1492,99 @@ button:disabled {
 .login-switch button:hover {
     text-decoration: underline;
 }
+/* =========================================================
+   RESOURCE OWNER ACTIONS
+========================================================= */
 
+.resource-owner-actions {
+    display: flex;
+    gap: 10px;
+    margin: 18px 0;
+}
+
+.edit-button,
+.delete-button,
+.cancel-button {
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: 0.2s ease;
+}
+
+.edit-button {
+    background: #e8f4ff;
+    color: #1769aa;
+}
+
+.edit-button:hover {
+    background: #d5ebff;
+}
+
+.delete-button {
+    background: #ffe8e8;
+    color: #c62828;
+}
+
+.delete-button:hover {
+    background: #ffd5d5;
+}
+
+.delete-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* =========================================================
+   EDIT RESOURCE FORM
+========================================================= */
+
+.edit-resource-form {
+    margin-top: 10px;
+}
+
+.edit-resource-form h3 {
+    margin-bottom: 18px;
+}
+
+.edit-resource-form .form-group {
+    margin-bottom: 14px;
+}
+
+.edit-resource-form label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+
+.edit-resource-form input,
+.edit-resource-form textarea {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.edit-resource-form textarea {
+    min-height: 90px;
+    resize: vertical;
+}
+
+.edit-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.cancel-button {
+    background: #eeeeee;
+    color: #333333;
+}
+
+.cancel-button:hover {
+    background: #dddddd;
+}
+
+.cancel-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
