@@ -23,10 +23,8 @@ router.post("/", authenticateUser, async (req, res) => {
         } = req.body;
 
         const user_id = req.user.id;
-
         const resourceQuantity = Number(quantity);
 
-        // Validation
         if (!title || !category) {
             return res.status(400).json({
                 message: "Title and category are required"
@@ -74,10 +72,7 @@ router.post("/", authenticateUser, async (req, res) => {
         });
 
     } catch (error) {
-        console.error(
-            "Error creating resource:",
-            error.message
-        );
+        console.error("Error creating resource:", error.message);
 
         res.status(500).json({
             message: "Failed to create resource",
@@ -106,10 +101,7 @@ router.get("/", async (req, res) => {
         });
 
     } catch (error) {
-        console.error(
-            "Error fetching resources:",
-            error.message
-        );
+        console.error("Error fetching resources:", error.message);
 
         res.status(500).json({
             message: "Failed to fetch resources",
@@ -147,10 +139,7 @@ router.get("/:id", async (req, res) => {
         });
 
     } catch (error) {
-        console.error(
-            "Error fetching resource:",
-            error.message
-        );
+        console.error("Error fetching resource:", error.message);
 
         res.status(500).json({
             message: "Failed to fetch resource",
@@ -185,7 +174,6 @@ router.put(
 
             const resourceQuantity = Number(quantity);
 
-            // Check resource ownership
             const existingResource = await pool.query(
                 `SELECT *
                  FROM resources
@@ -199,9 +187,23 @@ router.put(
                 });
             }
 
+            // TEMPORARY OWNERSHIP DIAGNOSTICS
+            const dbUserId = existingResource.rows[0].user_id;
+            const tokenUserId = req.user.id;
+
+            console.log("OWNER CHECK DEBUG (UPDATE):");
+            console.log("Database user ID:", JSON.stringify(dbUserId));
+            console.log("Database ID type:", typeof dbUserId);
+            console.log("Token user ID:", JSON.stringify(tokenUserId));
+            console.log("Token ID type:", typeof tokenUserId);
+            console.log(
+                "IDs match:",
+                String(dbUserId).trim() === String(tokenUserId).trim()
+            );
+
             if (
-                existingResource.rows[0].user_id !==
-                req.user.id
+                String(dbUserId).trim() !==
+                String(tokenUserId).trim()
             ) {
                 return res.status(403).json({
                     message:
@@ -255,10 +257,7 @@ router.put(
             });
 
         } catch (error) {
-            console.error(
-                "Error updating resource:",
-                error.message
-            );
+            console.error("Error updating resource:", error.message);
 
             res.status(500).json({
                 message: "Failed to update resource",
@@ -283,7 +282,6 @@ router.delete(
         try {
             const { id } = req.params;
 
-            // Check ownership
             const existingResource = await pool.query(
                 `SELECT *
                  FROM resources
@@ -297,9 +295,23 @@ router.delete(
                 });
             }
 
+            // TEMPORARY OWNERSHIP DIAGNOSTICS
+            const dbUserId = existingResource.rows[0].user_id;
+            const tokenUserId = req.user.id;
+
+            console.log("OWNER CHECK DEBUG (DELETE):");
+            console.log("Database user ID:", JSON.stringify(dbUserId));
+            console.log("Database ID type:", typeof dbUserId);
+            console.log("Token user ID:", JSON.stringify(tokenUserId));
+            console.log("Token ID type:", typeof tokenUserId);
+            console.log(
+                "IDs match:",
+                String(dbUserId).trim() === String(tokenUserId).trim()
+            );
+
             if (
-                existingResource.rows[0].user_id !==
-                req.user.id
+                String(dbUserId).trim() !==
+                String(tokenUserId).trim()
             ) {
                 return res.status(403).json({
                     message:
@@ -320,10 +332,7 @@ router.delete(
             });
 
         } catch (error) {
-            console.error(
-                "Error deleting resource:",
-                error.message
-            );
+            console.error("Error deleting resource:", error.message);
 
             res.status(500).json({
                 message: "Failed to delete resource",
