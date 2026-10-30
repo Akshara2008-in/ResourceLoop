@@ -1,35 +1,57 @@
-const { createClient } = require("@supabase/supabase-js");
 
-const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_PUBLISHABLE_KEY
-);
+const { createClient } = require("@supabase/supabase-js");
 
 const authenticateUser = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
 
-        if (!authHeader) {
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
             return res.status(401).json({
                 message: "Authentication required"
             });
         }
 
-        const token = authHeader.replace("Bearer ", "");
+        const token = authHeader.substring(7).trim();
 
-        const {
-            data: { user },
-            error
-        } = await supabase.auth.getUser(token);
-
-        if (error || !user) {
+        if (!token) {
             return res.status(401).json({
-                message: "Invalid or expired token"
+                message: "Access token is missing"
             });
         }
 
-        // Store authenticated user in request
-        req.user = user;
+        const supabase = createClient(
+            process.env.SUPABASE_URL,
+            process.env.SUPABASE_PUBLISHABLE_KEY,
+            {
+                auth: {
+                    persistSession: false,
+                    autoRefreshToken: false,
+                    detectSessionInUrl: false
+                }
+            }
+        );
+
+        // Verify the JWT and retrieve its trusted claims.
+        const { data, error } =
+            await supabase.auth.getClaims(token);
+
+        if (error || !data?.claims?.sub) {
+            return res.status(401).json({
+                message: "Invalid or expired access token"
+            });
+        }
+
+        const claims = data.claims;
+
+        // Make authenticated user information available to routes.
+        req.authClaims = claims;
+
+        req.user = {
+            id: claims.sub,
+            email: claims.email,
+            app_metadata: claims.app_metadata,
+            user_metadata: claims.user_metadata
+        };
 
         next();
 
@@ -39,7 +61,7 @@ const authenticateUser = async (req, res, next) => {
             error.message
         );
 
-        res.status(401).json({
+        return res.status(401).json({
             message: "Authentication failed"
         });
     }

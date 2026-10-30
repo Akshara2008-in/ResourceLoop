@@ -1,7 +1,9 @@
+
 const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 const authenticateUser = require("../authMiddleware");
+const requireMfa = require("../requireMfa");
 
 
 // =====================================================
@@ -92,7 +94,6 @@ router.post("/", authenticateUser, async (req, res) => {
 
 router.get("/", async (req, res) => {
     try {
-
         const result = await pool.query(
             `SELECT *
              FROM resources
@@ -105,7 +106,6 @@ router.get("/", async (req, res) => {
         });
 
     } catch (error) {
-
         console.error(
             "Error fetching resources:",
             error.message
@@ -126,7 +126,6 @@ router.get("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
     try {
-
         const { id } = req.params;
 
         const result = await pool.query(
@@ -148,7 +147,6 @@ router.get("/:id", async (req, res) => {
         });
 
     } catch (error) {
-
         console.error(
             "Error fetching resource:",
             error.message
@@ -165,167 +163,175 @@ router.get("/:id", async (req, res) => {
 // =====================================================
 // UPDATE RESOURCE
 // PUT /api/resources/:id
+// Requires authentication + MFA
 // =====================================================
 
-router.put("/:id", authenticateUser, async (req, res) => {
-    try {
+router.put(
+    "/:id",
+    authenticateUser,
+    requireMfa,
+    async (req, res) => {
+        try {
+            const { id } = req.params;
 
-        const { id } = req.params;
-
-        const {
-            title,
-            description,
-            category,
-            quantity,
-            condition,
-            location
-        } = req.body;
-
-        const resourceQuantity = Number(quantity);
-
-        // Check resource ownership
-        const existingResource = await pool.query(
-            `SELECT *
-             FROM resources
-             WHERE id = $1`,
-            [id]
-        );
-
-        if (existingResource.rows.length === 0) {
-            return res.status(404).json({
-                message: "Resource not found"
-            });
-        }
-
-        if (
-            existingResource.rows[0].user_id !==
-            req.user.id
-        ) {
-            return res.status(403).json({
-                message:
-                    "You are not authorized to update this resource"
-            });
-        }
-
-        // Validate quantity
-        if (
-            !Number.isInteger(resourceQuantity) ||
-            resourceQuantity < 0
-        ) {
-            return res.status(400).json({
-                message:
-                    "Quantity must be a non-negative integer"
-            });
-        }
-
-        const status =
-            resourceQuantity === 0
-                ? "unavailable"
-                : "available";
-
-        const result = await pool.query(
-            `UPDATE resources
-             SET
-                title = $1,
-                description = $2,
-                category = $3,
-                quantity = $4,
-                condition = $5,
-                location = $6,
-                status = $7
-             WHERE id = $8
-             RETURNING *`,
-            [
+            const {
                 title,
-                description || null,
+                description,
                 category,
-                resourceQuantity,
-                condition || null,
-                location || null,
-                status,
-                id
-            ]
-        );
+                quantity,
+                condition,
+                location
+            } = req.body;
 
-        res.json({
-            message: "Resource updated successfully",
-            resource: result.rows[0]
-        });
+            const resourceQuantity = Number(quantity);
 
-    } catch (error) {
+            // Check resource ownership
+            const existingResource = await pool.query(
+                `SELECT *
+                 FROM resources
+                 WHERE id = $1`,
+                [id]
+            );
 
-        console.error(
-            "Error updating resource:",
-            error.message
-        );
+            if (existingResource.rows.length === 0) {
+                return res.status(404).json({
+                    message: "Resource not found"
+                });
+            }
 
-        res.status(500).json({
-            message: "Failed to update resource",
-            error: error.message
-        });
+            if (
+                existingResource.rows[0].user_id !==
+                req.user.id
+            ) {
+                return res.status(403).json({
+                    message:
+                        "You are not authorized to update this resource"
+                });
+            }
+
+            // Validate quantity
+            if (
+                !Number.isInteger(resourceQuantity) ||
+                resourceQuantity < 0
+            ) {
+                return res.status(400).json({
+                    message:
+                        "Quantity must be a non-negative integer"
+                });
+            }
+
+            const status =
+                resourceQuantity === 0
+                    ? "unavailable"
+                    : "available";
+
+            const result = await pool.query(
+                `UPDATE resources
+                 SET
+                    title = $1,
+                    description = $2,
+                    category = $3,
+                    quantity = $4,
+                    condition = $5,
+                    location = $6,
+                    status = $7
+                 WHERE id = $8
+                 RETURNING *`,
+                [
+                    title,
+                    description || null,
+                    category,
+                    resourceQuantity,
+                    condition || null,
+                    location || null,
+                    status,
+                    id
+                ]
+            );
+
+            res.json({
+                message: "Resource updated successfully",
+                resource: result.rows[0]
+            });
+
+        } catch (error) {
+            console.error(
+                "Error updating resource:",
+                error.message
+            );
+
+            res.status(500).json({
+                message: "Failed to update resource",
+                error: error.message
+            });
+        }
     }
-});
+);
 
 
 // =====================================================
 // DELETE RESOURCE
 // DELETE /api/resources/:id
+// Requires authentication + MFA
 // =====================================================
 
-router.delete("/:id", authenticateUser, async (req, res) => {
-    try {
+router.delete(
+    "/:id",
+    authenticateUser,
+    requireMfa,
+    async (req, res) => {
+        try {
+            const { id } = req.params;
 
-        const { id } = req.params;
+            // Check ownership
+            const existingResource = await pool.query(
+                `SELECT *
+                 FROM resources
+                 WHERE id = $1`,
+                [id]
+            );
 
-        // Check ownership
-        const existingResource = await pool.query(
-            `SELECT *
-             FROM resources
-             WHERE id = $1`,
-            [id]
-        );
+            if (existingResource.rows.length === 0) {
+                return res.status(404).json({
+                    message: "Resource not found"
+                });
+            }
 
-        if (existingResource.rows.length === 0) {
-            return res.status(404).json({
-                message: "Resource not found"
+            if (
+                existingResource.rows[0].user_id !==
+                req.user.id
+            ) {
+                return res.status(403).json({
+                    message:
+                        "You are not authorized to delete this resource"
+                });
+            }
+
+            const result = await pool.query(
+                `DELETE FROM resources
+                 WHERE id = $1
+                 RETURNING *`,
+                [id]
+            );
+
+            res.json({
+                message: "Resource deleted successfully",
+                resource: result.rows[0]
+            });
+
+        } catch (error) {
+            console.error(
+                "Error deleting resource:",
+                error.message
+            );
+
+            res.status(500).json({
+                message: "Failed to delete resource",
+                error: error.message
             });
         }
-
-        if (
-            existingResource.rows[0].user_id !==
-            req.user.id
-        ) {
-            return res.status(403).json({
-                message:
-                    "You are not authorized to delete this resource"
-            });
-        }
-
-        const result = await pool.query(
-            `DELETE FROM resources
-             WHERE id = $1
-             RETURNING *`,
-            [id]
-        );
-
-        res.json({
-            message: "Resource deleted successfully",
-            resource: result.rows[0]
-        });
-
-    } catch (error) {
-
-        console.error(
-            "Error deleting resource:",
-            error.message
-        );
-
-        res.status(500).json({
-            message: "Failed to delete resource",
-            error: error.message
-        });
     }
-});
+);
 
 
 module.exports = router;

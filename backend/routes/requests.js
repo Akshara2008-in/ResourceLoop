@@ -3,7 +3,7 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 const authenticateUser = require("../authMiddleware");
-
+const requireMfa = require("../requireMfa");
 
 // =====================================================
 // CREATE A RESOURCE REQUEST
@@ -12,12 +12,7 @@ const authenticateUser = require("../authMiddleware");
 router.post("/", authenticateUser, async (req, res) => {
     try {
         const { resource_id, quantity } = req.body;
-
         const authUserEmail = req.user.email;
-
-        // -------------------------------------------------
-        // Find requester profile using authenticated email
-        // -------------------------------------------------
 
         const profileResult = await pool.query(
             `SELECT id
@@ -29,26 +24,17 @@ router.post("/", authenticateUser, async (req, res) => {
 
         if (profileResult.rows.length === 0) {
             return res.status(404).json({
-                message:
-                    "User profile not found. Please make sure your account exists in the profiles table."
+                message: "User profile not found. Please make sure your account exists in the profiles table."
             });
         }
 
         const requester_id = profileResult.rows[0].id;
-
-        // -------------------------------------------------
-        // Validate resource ID
-        // -------------------------------------------------
 
         if (!resource_id) {
             return res.status(400).json({
                 message: "Resource ID is required"
             });
         }
-
-        // -------------------------------------------------
-        // Validate quantity
-        // -------------------------------------------------
 
         const requestedQuantity = Number(quantity);
 
@@ -57,14 +43,9 @@ router.post("/", authenticateUser, async (req, res) => {
             requestedQuantity <= 0
         ) {
             return res.status(400).json({
-                message:
-                    "Quantity must be a positive integer"
+                message: "Quantity must be a positive integer"
             });
         }
-
-        // -------------------------------------------------
-        // Get resource
-        // -------------------------------------------------
 
         const resourceResult = await pool.query(
             `SELECT *
@@ -81,41 +62,23 @@ router.post("/", authenticateUser, async (req, res) => {
 
         const resource = resourceResult.rows[0];
 
-        // -------------------------------------------------
-        // Check availability
-        // -------------------------------------------------
-
         if (Number(resource.quantity) <= 0) {
             return res.status(400).json({
-                message:
-                    "This resource is currently unavailable"
+                message: "This resource is currently unavailable"
             });
         }
 
-        if (
-            requestedQuantity >
-            Number(resource.quantity)
-        ) {
+        if (requestedQuantity > Number(resource.quantity)) {
             return res.status(400).json({
-                message:
-                    "Requested quantity is greater than available quantity"
+                message: "Requested quantity is greater than available quantity"
             });
         }
-
-        // -------------------------------------------------
-        // Prevent requesting own resource
-        // -------------------------------------------------
 
         if (resource.user_id === requester_id) {
             return res.status(400).json({
-                message:
-                    "You cannot request your own resource"
+                message: "You cannot request your own resource"
             });
         }
-
-        // -------------------------------------------------
-        // Create request
-        // -------------------------------------------------
 
         const result = await pool.query(
             `INSERT INTO requests
@@ -130,21 +93,16 @@ router.post("/", authenticateUser, async (req, res) => {
         );
 
         res.status(201).json({
-            message:
-                "Resource request created successfully",
+            message: "Resource request created successfully",
             request: result.rows[0],
             requester_profile_id: requester_id
         });
 
     } catch (error) {
-        console.error(
-            "Error creating request:",
-            error.message
-        );
+        console.error("Error creating request:", error.message);
 
         res.status(500).json({
-            message:
-                "Failed to create resource request",
+            message: "Failed to create resource request",
             error: error.message
         });
     }
@@ -162,10 +120,6 @@ router.get(
         try {
             const userEmail = req.user.email;
 
-            // -------------------------------------------------
-            // Find owner's profile
-            // -------------------------------------------------
-
             const profileResult = await pool.query(
                 `SELECT id
                  FROM profiles
@@ -176,17 +130,11 @@ router.get(
 
             if (profileResult.rows.length === 0) {
                 return res.status(404).json({
-                    message:
-                        "Owner profile not found"
+                    message: "Owner profile not found"
                 });
             }
 
-            const profileId =
-                profileResult.rows[0].id;
-
-            // -------------------------------------------------
-            // Get incoming requests
-            // -------------------------------------------------
+            const profileId = profileResult.rows[0].id;
 
             const result = await pool.query(
                 `SELECT
@@ -209,22 +157,16 @@ router.get(
             );
 
             res.json({
-                message:
-                    "Owner requests retrieved successfully",
+                message: "Owner requests retrieved successfully",
                 requests: result.rows
             });
 
         } catch (error) {
-            console.error(
-                "Error fetching owner requests:",
-                error.message
-            );
+            console.error("Error fetching owner requests:", error.message);
 
             res.status(500).json({
-                message:
-                    "Failed to fetch owner requests",
-                error:
-                    error.message
+                message: "Failed to fetch owner requests",
+                error: error.message
             });
         }
     }
@@ -242,10 +184,6 @@ router.get(
         try {
             const userEmail = req.user.email;
 
-            // -------------------------------------------------
-            // Find user's profile
-            // -------------------------------------------------
-
             const profileResult = await pool.query(
                 `SELECT id
                  FROM profiles
@@ -256,17 +194,11 @@ router.get(
 
             if (profileResult.rows.length === 0) {
                 return res.status(404).json({
-                    message:
-                        "User profile not found"
+                    message: "User profile not found"
                 });
             }
 
-            const profileId =
-                profileResult.rows[0].id;
-
-            // -------------------------------------------------
-            // Get user's requests
-            // -------------------------------------------------
+            const profileId = profileResult.rows[0].id;
 
             const result = await pool.query(
                 `SELECT
@@ -289,23 +221,16 @@ router.get(
             );
 
             res.json({
-                message:
-                    "User requests retrieved successfully",
-                requests:
-                    result.rows
+                message: "User requests retrieved successfully",
+                requests: result.rows
             });
 
         } catch (error) {
-            console.error(
-                "Error fetching user requests:",
-                error.message
-            );
+            console.error("Error fetching user requests:", error.message);
 
             res.status(500).json({
-                message:
-                    "Failed to fetch user requests",
-                error:
-                    error.message
+                message: "Failed to fetch user requests",
+                error: error.message
             });
         }
     }
@@ -313,19 +238,16 @@ router.get(
 
 
 // =====================================================
-// APPROVE REQUEST
+// APPROVE REQUEST - MFA REQUIRED
 // =====================================================
 
 router.patch(
     "/:requestId/approve",
     authenticateUser,
+    requireMfa,
     async (req, res) => {
         try {
             const { requestId } = req.params;
-
-            // -------------------------------------------------
-            // Find owner's profile
-            // -------------------------------------------------
 
             const profileResult = await pool.query(
                 `SELECT id
@@ -337,17 +259,11 @@ router.patch(
 
             if (profileResult.rows.length === 0) {
                 return res.status(404).json({
-                    message:
-                        "Owner profile not found"
+                    message: "Owner profile not found"
                 });
             }
 
-            const ownerId =
-                profileResult.rows[0].id;
-
-            // -------------------------------------------------
-            // Get request and resource owner
-            // -------------------------------------------------
+            const ownerId = profileResult.rows[0].id;
 
             const requestResult = await pool.query(
                 `SELECT
@@ -366,53 +282,32 @@ router.patch(
 
             if (requestResult.rows.length === 0) {
                 return res.status(404).json({
-                    message:
-                        "Request not found"
+                    message: "Request not found"
                 });
             }
 
-            const request =
-                requestResult.rows[0];
-
-            // -------------------------------------------------
-            // Verify ownership
-            // -------------------------------------------------
+            const request = requestResult.rows[0];
 
             if (request.owner_id !== ownerId) {
                 return res.status(403).json({
-                    message:
-                        "You are not authorized to approve this request"
+                    message: "You are not authorized to approve this request"
                 });
             }
-
-            // -------------------------------------------------
-            // Check status
-            // -------------------------------------------------
 
             if (request.status !== "pending") {
                 return res.status(400).json({
-                    message:
-                        "This request has already been processed"
+                    message: "This request has already been processed"
                 });
             }
-
-            // -------------------------------------------------
-            // Check quantity
-            // -------------------------------------------------
 
             if (
                 Number(request.quantity) >
                 Number(request.available_quantity)
             ) {
                 return res.status(400).json({
-                    message:
-                        "Not enough resources available"
+                    message: "Not enough resources available"
                 });
             }
-
-            // -------------------------------------------------
-            // Reduce resource quantity
-            // -------------------------------------------------
 
             const resourceUpdate = await pool.query(
                 `UPDATE resources
@@ -434,14 +329,9 @@ router.patch(
 
             if (resourceUpdate.rows.length === 0) {
                 return res.status(400).json({
-                    message:
-                        "Not enough resources available"
+                    message: "Not enough resources available"
                 });
             }
-
-            // -------------------------------------------------
-            // Approve request
-            // -------------------------------------------------
 
             const requestUpdate = await pool.query(
                 `UPDATE requests
@@ -452,25 +342,17 @@ router.patch(
             );
 
             res.json({
-                message:
-                    "Resource request approved successfully",
-                request:
-                    requestUpdate.rows[0],
-                resource:
-                    resourceUpdate.rows[0]
+                message: "Resource request approved successfully",
+                request: requestUpdate.rows[0],
+                resource: resourceUpdate.rows[0]
             });
 
         } catch (error) {
-            console.error(
-                "Error approving request:",
-                error.message
-            );
+            console.error("Error approving request:", error.message);
 
             res.status(500).json({
-                message:
-                    "Failed to approve request",
-                error:
-                    error.message
+                message: "Failed to approve request",
+                error: error.message
             });
         }
     }
@@ -478,19 +360,16 @@ router.patch(
 
 
 // =====================================================
-// REJECT REQUEST
+// REJECT REQUEST - MFA REQUIRED
 // =====================================================
 
 router.patch(
     "/:requestId/reject",
     authenticateUser,
+    requireMfa,
     async (req, res) => {
         try {
             const { requestId } = req.params;
-
-            // -------------------------------------------------
-            // Find owner's profile
-            // -------------------------------------------------
 
             const profileResult = await pool.query(
                 `SELECT id
@@ -502,17 +381,11 @@ router.patch(
 
             if (profileResult.rows.length === 0) {
                 return res.status(404).json({
-                    message:
-                        "Owner profile not found"
+                    message: "Owner profile not found"
                 });
             }
 
-            const ownerId =
-                profileResult.rows[0].id;
-
-            // -------------------------------------------------
-            // Get request + resource owner
-            // -------------------------------------------------
+            const ownerId = profileResult.rows[0].id;
 
             const requestResult = await pool.query(
                 `SELECT
@@ -527,39 +400,23 @@ router.patch(
 
             if (requestResult.rows.length === 0) {
                 return res.status(404).json({
-                    message:
-                        "Request not found"
+                    message: "Request not found"
                 });
             }
 
-            const request =
-                requestResult.rows[0];
-
-            // -------------------------------------------------
-            // Verify ownership
-            // -------------------------------------------------
+            const request = requestResult.rows[0];
 
             if (request.owner_id !== ownerId) {
                 return res.status(403).json({
-                    message:
-                        "You are not authorized to reject this request"
+                    message: "You are not authorized to reject this request"
                 });
             }
-
-            // -------------------------------------------------
-            // Check status
-            // -------------------------------------------------
 
             if (request.status !== "pending") {
                 return res.status(400).json({
-                    message:
-                        "This request has already been processed"
+                    message: "This request has already been processed"
                 });
             }
-
-            // -------------------------------------------------
-            // Reject request
-            // -------------------------------------------------
 
             const result = await pool.query(
                 `UPDATE requests
@@ -570,23 +427,16 @@ router.patch(
             );
 
             res.json({
-                message:
-                    "Resource request rejected successfully",
-                request:
-                    result.rows[0]
+                message: "Resource request rejected successfully",
+                request: result.rows[0]
             });
 
         } catch (error) {
-            console.error(
-                "Error rejecting request:",
-                error.message
-            );
+            console.error("Error rejecting request:", error.message);
 
             res.status(500).json({
-                message:
-                    "Failed to reject request",
-                error:
-                    error.message
+                message: "Failed to reject request",
+                error: error.message
             });
         }
     }
@@ -598,4 +448,3 @@ router.patch(
 // =====================================================
 
 module.exports = router;
-

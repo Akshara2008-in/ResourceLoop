@@ -1,13 +1,16 @@
+
 import { useEffect, useState } from "react";
 import "./App.css";
 import { supabase } from "./supabase";
 import Login from "./Login";
+import MfaGate from "./MfaGate";
 
-const API_URL = "https://resourceloop-api.onrender.com";
+const API_URL = "https://resourceloop-backend-efph.onrender.com";
 
 function App() {
     const [user, setUser] = useState(null);
     const [checkingAuth, setCheckingAuth] = useState(true);
+    const [mfaVerified, setMfaVerified] = useState(false);
 
     const [resources, setResources] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -60,8 +63,13 @@ function App() {
         const getSession = async () => {
             try {
                 const {
-                    data: { session }
+                    data: { session },
+                    error
                 } = await supabase.auth.getSession();
+
+                if (error) {
+                    throw error;
+                }
 
                 setUser(session?.user || null);
             } catch (error) {
@@ -87,11 +95,22 @@ function App() {
     }, []);
 
     // =========================================================
+    // RESET MFA WHEN USER CHANGES
+    // =========================================================
+
+    const userId = user?.id;
+
+    useEffect(() => {
+        setMfaVerified(false);
+    }, [userId]);
+
+    // =========================================================
     // LOGIN
     // =========================================================
 
     const handleLogin = (loggedInUser) => {
         console.log("Logged in:", loggedInUser);
+        setMfaVerified(false);
         setUser(loggedInUser);
     };
 
@@ -108,16 +127,19 @@ function App() {
             }
 
             setUser(null);
+            setMfaVerified(false);
+
             setResources([]);
             setRequests([]);
             setMyRequests([]);
+
+            setEditingResourceId(null);
+
         } catch (error) {
             console.error(error);
             alert(error.message);
         }
     };
-
-    const userId = user?.id;
 
     // =========================================================
     // AUTH HEADERS
@@ -162,6 +184,7 @@ function App() {
             }
 
             setResources(data.resources || []);
+
         } catch (error) {
             console.error(error);
 
@@ -169,6 +192,7 @@ function App() {
                 error.message ||
                 "Unable to load resources"
             );
+
         } finally {
             setLoading(false);
         }
@@ -204,11 +228,13 @@ function App() {
             }
 
             setRequests(data.requests || []);
+
         } catch (error) {
             console.error(
                 "Owner requests:",
                 error
             );
+
         } finally {
             setRequestsLoading(false);
         }
@@ -244,11 +270,13 @@ function App() {
             }
 
             setMyRequests(data.requests || []);
+
         } catch (error) {
             console.error(
                 "My requests:",
                 error
             );
+
         } finally {
             setMyRequestsLoading(false);
         }
@@ -319,9 +347,7 @@ function App() {
                 );
             }
 
-            alert(
-                "Resource added successfully!"
-            );
+            alert("Resource added successfully!");
 
             setForm({
                 title: "",
@@ -356,7 +382,6 @@ function App() {
             location: resource.location || ""
         });
 
-        // Scroll to the resource card
         setTimeout(() => {
             const element = document.getElementById(
                 `resource-${resource.id}`
@@ -436,9 +461,7 @@ function App() {
                 );
             }
 
-            alert(
-                "Resource updated successfully!"
-            );
+            alert("Resource updated successfully!");
 
             setEditingResourceId(null);
 
@@ -460,6 +483,7 @@ function App() {
             );
 
             alert(error.message);
+
         } finally {
             setUpdatingResource(false);
         }
@@ -523,12 +547,8 @@ function App() {
                 );
             }
 
-            alert(
-                "Resource deleted successfully!"
-            );
+            alert("Resource deleted successfully!");
 
-            // If the deleted resource was being edited,
-            // close the edit form.
             if (editingResourceId === resourceId) {
                 cancelEditing();
             }
@@ -542,6 +562,7 @@ function App() {
             );
 
             alert(error.message);
+
         } finally {
             setDeletingResourceId(null);
         }
@@ -558,13 +579,10 @@ function App() {
         }
 
         const quantity =
-            Number(
-                requestQuantities[resourceId]
-            ) || 1;
+            Number(requestQuantities[resourceId]) || 1;
 
         try {
-            const headers =
-                await getAuthHeaders();
+            const headers = await getAuthHeaders();
 
             const response = await fetch(
                 `${API_URL}/api/requests`,
@@ -578,8 +596,7 @@ function App() {
                 }
             );
 
-            const data =
-                await response.json();
+            const data = await response.json();
 
             if (!response.ok) {
                 throw new Error(
@@ -613,8 +630,7 @@ function App() {
 
     const approveRequest = async (requestId) => {
         try {
-            const headers =
-                await getAuthHeaders();
+            const headers = await getAuthHeaders();
 
             const response = await fetch(
                 `${API_URL}/api/requests/${requestId}/approve`,
@@ -624,8 +640,7 @@ function App() {
                 }
             );
 
-            const data =
-                await response.json();
+            const data = await response.json();
 
             if (!response.ok) {
                 throw new Error(
@@ -635,9 +650,7 @@ function App() {
                 );
             }
 
-            alert(
-                "Request approved successfully!"
-            );
+            alert("Request approved successfully!");
 
             fetchOwnerRequests();
             fetchMyRequests();
@@ -655,8 +668,7 @@ function App() {
 
     const rejectRequest = async (requestId) => {
         try {
-            const headers =
-                await getAuthHeaders();
+            const headers = await getAuthHeaders();
 
             const response = await fetch(
                 `${API_URL}/api/requests/${requestId}/reject`,
@@ -666,8 +678,7 @@ function App() {
                 }
             );
 
-            const data =
-                await response.json();
+            const data = await response.json();
 
             if (!response.ok) {
                 throw new Error(
@@ -677,9 +688,7 @@ function App() {
                 );
             }
 
-            alert(
-                "Request rejected successfully!"
-            );
+            alert("Request rejected successfully!");
 
             fetchOwnerRequests();
             fetchMyRequests();
@@ -699,32 +708,24 @@ function App() {
         maxQuantity
     ) => {
         const current =
-            Number(
-                requestQuantities[resourceId]
-            ) || 1;
+            Number(requestQuantities[resourceId]) || 1;
 
         if (current < maxQuantity) {
             setRequestQuantities({
                 ...requestQuantities,
-                [resourceId]:
-                    current + 1
+                [resourceId]: current + 1
             });
         }
     };
 
-    const decreaseQuantity = (
-        resourceId
-    ) => {
+    const decreaseQuantity = (resourceId) => {
         const current =
-            Number(
-                requestQuantities[resourceId]
-            ) || 1;
+            Number(requestQuantities[resourceId]) || 1;
 
         if (current > 1) {
             setRequestQuantities({
                 ...requestQuantities,
-                [resourceId]:
-                    current - 1
+                [resourceId]: current - 1
             });
         }
     };
@@ -768,15 +769,26 @@ function App() {
     }
 
     // =========================================================
+    // MFA VERIFICATION SCREEN
+    // =========================================================
+
+    if (!mfaVerified) {
+        return (
+            <MfaGate
+                onVerified={() => setMfaVerified(true)}
+                onLogout={handleLogout}
+            />
+        );
+    }
+
+    // =========================================================
     // MAIN APPLICATION
     // =========================================================
 
     return (
         <div className="app">
 
-            {/* =================================================
-                NAVBAR
-            ================================================= */}
+            {/* NAVBAR */}
 
             <header className="navbar">
 
@@ -824,9 +836,7 @@ function App() {
 
             <main>
 
-                {/* =================================================
-                    HERO
-                ================================================= */}
+                {/* HERO */}
 
                 <section
                     className="hero"
@@ -863,9 +873,7 @@ function App() {
 
                 </section>
 
-                {/* =================================================
-                    ADD RESOURCE
-                ================================================= */}
+                {/* ADD RESOURCE */}
 
                 <section
                     className="add-resource"
@@ -1012,9 +1020,7 @@ function App() {
 
                 </section>
 
-                {/* =================================================
-                    AVAILABLE RESOURCES
-                ================================================= */}
+                {/* AVAILABLE RESOURCES */}
 
                 <section
                     className="resources-section"
@@ -1062,362 +1068,338 @@ function App() {
 
                     <div className="resource-grid">
 
-                        {resources.map(
-                            (resource) => {
+                        {resources.map((resource) => {
 
-                                const isOwner =
-                                    resource.user_id === user.id;
+                            const isOwner =
+                                resource.user_id === user.id;
 
-                                const isEditing =
-                                    editingResourceId === resource.id;
+                            const isEditing =
+                                editingResourceId === resource.id;
 
-                                const isDeleting =
-                                    deletingResourceId === resource.id;
+                            const isDeleting =
+                                deletingResourceId === resource.id;
 
-                                return (
+                            return (
 
-                                    <div
-                                        className="resource-card"
-                                        key={resource.id}
-                                        id={`resource-${resource.id}`}
-                                    >
+                                <div
+                                    className="resource-card"
+                                    key={resource.id}
+                                    id={`resource-${resource.id}`}
+                                >
 
-                                        <div className="card-header">
+                                    <div className="card-header">
 
-                                            <span className="category">
-                                                {resource.category}
-                                            </span>
+                                        <span className="category">
+                                            {resource.category}
+                                        </span>
 
-                                            <span className="status">
-                                                {resource.status}
-                                            </span>
+                                        <span className="status">
+                                            {resource.status}
+                                        </span>
+
+                                    </div>
+
+                                    {/* EDIT MODE */}
+
+                                    {isEditing ? (
+
+                                        <div className="edit-resource-form">
+
+                                            <h3>
+                                                Edit Resource
+                                            </h3>
+
+                                            <div className="form-group">
+
+                                                <label>
+                                                    Resource Title
+                                                </label>
+
+                                                <input
+                                                    type="text"
+                                                    name="title"
+                                                    value={editForm.title}
+                                                    onChange={handleEditChange}
+                                                    required
+                                                />
+
+                                            </div>
+
+                                            <div className="form-group">
+
+                                                <label>
+                                                    Description
+                                                </label>
+
+                                                <textarea
+                                                    name="description"
+                                                    value={editForm.description}
+                                                    onChange={handleEditChange}
+                                                />
+
+                                            </div>
+
+                                            <div className="form-group">
+
+                                                <label>
+                                                    Category
+                                                </label>
+
+                                                <input
+                                                    type="text"
+                                                    name="category"
+                                                    value={editForm.category}
+                                                    onChange={handleEditChange}
+                                                    required
+                                                />
+
+                                            </div>
+
+                                            <div className="form-group">
+
+                                                <label>
+                                                    Quantity
+                                                </label>
+
+                                                <input
+                                                    type="number"
+                                                    name="quantity"
+                                                    min="0"
+                                                    value={editForm.quantity}
+                                                    onChange={handleEditChange}
+                                                    required
+                                                />
+
+                                            </div>
+
+                                            <div className="form-group">
+
+                                                <label>
+                                                    Condition
+                                                </label>
+
+                                                <input
+                                                    type="text"
+                                                    name="condition"
+                                                    value={editForm.condition}
+                                                    onChange={handleEditChange}
+                                                />
+
+                                            </div>
+
+                                            <div className="form-group">
+
+                                                <label>
+                                                    Location
+                                                </label>
+
+                                                <input
+                                                    type="text"
+                                                    name="location"
+                                                    value={editForm.location}
+                                                    onChange={handleEditChange}
+                                                />
+
+                                            </div>
+
+                                            <div className="edit-actions">
+
+                                                <button
+                                                    type="button"
+                                                    className="primary-button"
+                                                    onClick={() =>
+                                                        handleUpdateResource(
+                                                            resource.id
+                                                        )
+                                                    }
+                                                    disabled={updatingResource}
+                                                >
+                                                    {updatingResource
+                                                        ? "Saving..."
+                                                        : "💾 Save Changes"}
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    className="cancel-button"
+                                                    onClick={cancelEditing}
+                                                    disabled={updatingResource}
+                                                >
+                                                    ↩ Cancel
+                                                </button>
+
+                                            </div>
 
                                         </div>
 
-                                        {/* =================================================
-                                            EDIT MODE
-                                        ================================================= */}
+                                    ) : (
 
-                                        {isEditing ? (
+                                        /* NORMAL RESOURCE VIEW */
 
-                                            <div className="edit-resource-form">
+                                        <>
 
-                                                <h3>
-                                                    Edit Resource
-                                                </h3>
+                                            <h3>
+                                                {resource.title}
+                                            </h3>
 
-                                                <div className="form-group">
+                                            <p className="description">
+                                                {resource.description ||
+                                                    "No description provided."}
+                                            </p>
 
-                                                    <label>
-                                                        Resource Title
-                                                    </label>
+                                            <div className="details">
 
-                                                    <input
-                                                        type="text"
-                                                        name="title"
-                                                        value={editForm.title}
-                                                        onChange={handleEditChange}
-                                                        required
-                                                    />
+                                                <p>
+                                                    <strong>
+                                                        Quantity:
+                                                    </strong>{" "}
+                                                    {resource.quantity}
+                                                </p>
 
-                                                </div>
+                                                <p>
+                                                    <strong>
+                                                        Condition:
+                                                    </strong>{" "}
+                                                    {resource.condition ||
+                                                        "Not specified"}
+                                                </p>
 
-                                                <div className="form-group">
+                                                <p>
+                                                    <strong>
+                                                        Location:
+                                                    </strong>{" "}
+                                                    {resource.location ||
+                                                        "Not specified"}
+                                                </p>
 
-                                                    <label>
-                                                        Description
-                                                    </label>
+                                            </div>
 
-                                                    <textarea
-                                                        name="description"
-                                                        value={editForm.description}
-                                                        onChange={handleEditChange}
-                                                    />
+                                            {/* OWNER ACTIONS */}
 
-                                                </div>
+                                            {isOwner && (
 
-                                                <div className="form-group">
+                                                <div className="resource-owner-actions">
 
-                                                    <label>
-                                                        Category
-                                                    </label>
+                                                    <button
+                                                        type="button"
+                                                        className="edit-button"
+                                                        onClick={() =>
+                                                            startEditing(resource)
+                                                        }
+                                                    >
+                                                        ✏️ Edit
+                                                    </button>
 
-                                                    <input
-                                                        type="text"
-                                                        name="category"
-                                                        value={editForm.category}
-                                                        onChange={handleEditChange}
-                                                        required
-                                                    />
-
-                                                </div>
-
-                                                <div className="form-group">
-
-                                                    <label>
-                                                        Quantity
-                                                    </label>
-
-                                                    <input
-                                                        type="number"
-                                                        name="quantity"
-                                                        min="0"
-                                                        value={editForm.quantity}
-                                                        onChange={handleEditChange}
-                                                        required
-                                                    />
-
-                                                </div>
-
-                                                <div className="form-group">
-
-                                                    <label>
-                                                        Condition
-                                                    </label>
-
-                                                    <input
-                                                        type="text"
-                                                        name="condition"
-                                                        value={editForm.condition}
-                                                        onChange={handleEditChange}
-                                                    />
+                                                    <button
+                                                        type="button"
+                                                        className="delete-button"
+                                                        onClick={() =>
+                                                            handleDeleteResource(
+                                                                resource.id
+                                                            )
+                                                        }
+                                                        disabled={isDeleting}
+                                                    >
+                                                        {isDeleting
+                                                            ? "Deleting..."
+                                                            : "🗑️ Delete"}
+                                                    </button>
 
                                                 </div>
 
-                                                <div className="form-group">
+                                            )}
 
-                                                    <label>
-                                                        Location
-                                                    </label>
+                                            {/* REQUEST SECTION */}
 
-                                                    <input
-                                                        type="text"
-                                                        name="location"
-                                                        value={editForm.location}
-                                                        onChange={handleEditChange}
-                                                    />
+                                            {Number(resource.quantity) > 0 ? (
 
-                                                </div>
+                                                <>
 
-                                                <div className="edit-actions">
+                                                    <div className="quantity-selector">
+
+                                                        <strong>
+                                                            Request Quantity:
+                                                        </strong>
+
+                                                        <div className="quantity-controls">
+
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    decreaseQuantity(
+                                                                        resource.id
+                                                                    )
+                                                                }
+                                                            >
+                                                                −
+                                                            </button>
+
+                                                            <span>
+                                                                {
+                                                                    requestQuantities[
+                                                                        resource.id
+                                                                    ] || 1
+                                                                }
+                                                            </span>
+
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    increaseQuantity(
+                                                                        resource.id,
+                                                                        Number(
+                                                                            resource.quantity
+                                                                        )
+                                                                    )
+                                                                }
+                                                            >
+                                                                +
+                                                            </button>
+
+                                                        </div>
+
+                                                    </div>
 
                                                     <button
                                                         type="button"
                                                         className="primary-button"
                                                         onClick={() =>
-                                                            handleUpdateResource(
+                                                            handleRequest(
                                                                 resource.id
                                                             )
                                                         }
-                                                        disabled={
-                                                            updatingResource
-                                                        }
                                                     >
-                                                        {updatingResource
-                                                            ? "Saving..."
-                                                            : "💾 Save Changes"}
+                                                        Request Resource
                                                     </button>
 
-                                                    <button
-                                                        type="button"
-                                                        className="cancel-button"
-                                                        onClick={
-                                                            cancelEditing
-                                                        }
-                                                        disabled={
-                                                            updatingResource
-                                                        }
-                                                    >
-                                                        ↩ Cancel
-                                                    </button>
+                                                </>
 
-                                                </div>
+                                            ) : (
 
-                                            </div>
+                                                <button
+                                                    type="button"
+                                                    className="unavailable-button"
+                                                    disabled
+                                                >
+                                                    Unavailable
+                                                </button>
 
-                                        ) : (
+                                            )}
 
-                                            /* =================================================
-                                                NORMAL RESOURCE VIEW
-                                            ================================================= */
+                                        </>
 
-                                            <>
+                                    )}
 
-                                                <h3>
-                                                    {resource.title}
-                                                </h3>
+                                </div>
 
-                                                <p className="description">
-                                                    {resource.description ||
-                                                        "No description provided."}
-                                                </p>
-
-                                                <div className="details">
-
-                                                    <p>
-                                                        <strong>
-                                                            Quantity:
-                                                        </strong>{" "}
-                                                        {resource.quantity}
-                                                    </p>
-
-                                                    <p>
-                                                        <strong>
-                                                            Condition:
-                                                        </strong>{" "}
-                                                        {resource.condition ||
-                                                            "Not specified"}
-                                                    </p>
-
-                                                    <p>
-                                                        <strong>
-                                                            Location:
-                                                        </strong>{" "}
-                                                        {resource.location ||
-                                                            "Not specified"}
-                                                    </p>
-
-                                                </div>
-
-                                                {/* =================================================
-                                                    OWNER ACTIONS
-                                                ================================================= */}
-
-                                                {isOwner && (
-
-                                                    <div className="resource-owner-actions">
-
-                                                        <button
-                                                            type="button"
-                                                            className="edit-button"
-                                                            onClick={() =>
-                                                                startEditing(
-                                                                    resource
-                                                                )
-                                                            }
-                                                        >
-                                                            ✏️ Edit
-                                                        </button>
-
-                                                        <button
-                                                            type="button"
-                                                            className="delete-button"
-                                                            onClick={() =>
-                                                                handleDeleteResource(
-                                                                    resource.id
-                                                                )
-                                                            }
-                                                            disabled={
-                                                                isDeleting
-                                                            }
-                                                        >
-                                                            {isDeleting
-                                                                ? "Deleting..."
-                                                                : "🗑️ Delete"}
-                                                        </button>
-
-                                                    </div>
-
-                                                )}
-
-                                                {/* =================================================
-                                                    REQUEST SECTION
-                                                ================================================= */}
-
-                                                {Number(
-                                                    resource.quantity
-                                                ) > 0 ? (
-
-                                                    <>
-
-                                                        <div className="quantity-selector">
-
-                                                            <strong>
-                                                                Request Quantity:
-                                                            </strong>
-
-                                                            <div className="quantity-controls">
-
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() =>
-                                                                        decreaseQuantity(
-                                                                            resource.id
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    −
-                                                                </button>
-
-                                                                <span>
-                                                                    {
-                                                                        requestQuantities[
-                                                                            resource.id
-                                                                        ] || 1
-                                                                    }
-                                                                </span>
-
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() =>
-                                                                        increaseQuantity(
-                                                                            resource.id,
-                                                                            Number(
-                                                                                resource.quantity
-                                                                            )
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    +
-                                                                </button>
-
-                                                            </div>
-
-                                                        </div>
-
-                                                        <button
-                                                            type="button"
-                                                            className="primary-button"
-                                                            onClick={() =>
-                                                                handleRequest(
-                                                                    resource.id
-                                                                )
-                                                            }
-                                                        >
-                                                            Request Resource
-                                                        </button>
-
-                                                    </>
-
-                                                ) : (
-
-                                                    <button
-                                                        type="button"
-                                                        className="unavailable-button"
-                                                        disabled
-                                                    >
-                                                        Unavailable
-                                                    </button>
-
-                                                )}
-
-                                            </>
-
-                                        )}
-
-                                    </div>
-
-                                );
-                            }
-                        )}
+                            );
+                        })}
 
                     </div>
 
                 </section>
 
-                {/* =================================================
-                    INCOMING REQUESTS
-                ================================================= */}
+                {/* INCOMING REQUESTS */}
 
                 <section
                     className="requests-section"
@@ -1458,8 +1440,7 @@ function App() {
 
                     <div className="requests-list">
 
-                        {requests.map(
-                            (request) => (
+                        {requests.map((request) => (
 
                             <div
                                 className="request-card"
@@ -1471,8 +1452,7 @@ function App() {
                                     <div>
 
                                         <span className="category">
-                                            {request.category ||
-                                                "Resource"}
+                                            {request.category || "Resource"}
                                         </span>
 
                                         <h3>
@@ -1507,8 +1487,7 @@ function App() {
 
                                 </div>
 
-                                {request.status ===
-                                    "pending" && (
+                                {request.status === "pending" && (
 
                                     <div className="request-actions">
 
@@ -1516,9 +1495,7 @@ function App() {
                                             type="button"
                                             className="approve-button"
                                             onClick={() =>
-                                                approveRequest(
-                                                    request.id
-                                                )
+                                                approveRequest(request.id)
                                             }
                                         >
                                             ✓ Approve
@@ -1528,9 +1505,7 @@ function App() {
                                             type="button"
                                             className="reject-button"
                                             onClick={() =>
-                                                rejectRequest(
-                                                    request.id
-                                                )
+                                                rejectRequest(request.id)
                                             }
                                         >
                                             ✕ Reject
@@ -1542,16 +1517,13 @@ function App() {
 
                             </div>
 
-                        )
-                        )}
+                        ))}
 
                     </div>
 
                 </section>
 
-                {/* =================================================
-                    MY REQUESTS
-                ================================================= */}
+                {/* MY REQUESTS */}
 
                 <section
                     className="my-requests-section"
@@ -1591,8 +1563,7 @@ function App() {
 
                     <div className="requests-list">
 
-                        {myRequests.map(
-                            (request) => (
+                        {myRequests.map((request) => (
 
                             <div
                                 className="request-card"
@@ -1604,8 +1575,7 @@ function App() {
                                     <div>
 
                                         <span className="category">
-                                            {request.category ||
-                                                "Resource"}
+                                            {request.category || "Resource"}
                                         </span>
 
                                         <h3>
@@ -1635,16 +1605,14 @@ function App() {
                                         <strong>
                                             Location:
                                         </strong>{" "}
-                                        {request.location ||
-                                            "Not specified"}
+                                        {request.location || "Not specified"}
                                     </p>
 
                                 </div>
 
                             </div>
 
-                        )
-                        )}
+                        ))}
 
                     </div>
 
@@ -1652,9 +1620,7 @@ function App() {
 
             </main>
 
-            {/* =================================================
-                FOOTER
-            ================================================= */}
+            {/* FOOTER */}
 
             <footer className="footer">
 
